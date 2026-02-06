@@ -1,0 +1,31 @@
+news:
+  reuters:
+    enabled: true
+    refresh_interval: 300
+    feeds:
+      - "http://feeds.reuters.com/reuters/businessNews"
+      - "http://feeds.reuters.com/reuters/technologyNews"
+      - "http://feeds.reuters.com/reuters/topNews"
+
+  yahoo_finance:
+    enabled: true
+    refresh_interval: 300
+    tickers: ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA", "AMD"]
+
+  seeking_alpha:
+    enabled: true
+    refresh_interval: 300
+    feed_url: "https://seekingalpha.com/market_currents.xml"
+
+social:
+  twitter:
+    enabled: false
+    refresh_interval: 60
+    accounts: ["@markets", "@DeItaone", "@unusual_whales"]
+    keywords: ["$AAPL", "$TSLA", "Fed", "inflation"]
+
+  reddit:
+    enabled: false
+    refresh_interval: 600
+    subreddits: ["wallstreetbets", "stocks", "investing"]
+    min_score: 100
