@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 from ..base_collector import BaseCollector
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timezone
 
 class YahooFinanceCollector(BaseCollector):
     def __init__(self, tickers: List[str], refresh_interval: int = 300):
@@ -26,7 +26,7 @@ class YahooFinanceCollector(BaseCollector):
                         "link": content.get("canonicalUrl", {}).get("url"),
                         "publisher": provider.get("displayName"),
                         "timestamp": content.get("pubDate"),
-                        "crawled_at": datetime.utcnow().isoformat()
+                        "crawled_at": datetime.now(timezone.utc).isoformat()
                     })
             except Exception as e:
                 self.logger.error(f"Failed to fetch news for {ticker}: {e}")
