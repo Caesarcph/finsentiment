@@ -3,7 +3,7 @@ import logging
 import sys
 import shutil
 import socket
-from typing import List
+from typing import List, Dict, Any
 from ..collectors.news.reuters import ReutersCollector
 from ..collectors.news.yahoo_finance import YahooFinanceCollector
 
@@ -11,13 +11,22 @@ from ..collectors.news.yahoo_finance import YahooFinanceCollector
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def check_system_health():
+def check_system_health() -> Dict[str, Any]:
     """Checks basic system health metrics (disk space, connectivity)."""
     logger.info("Checking system health...")
+    
+    health_report = {
+        "timestamp": __import__('datetime').datetime.now().isoformat(),
+        "checks": {}
+    }
     
     # 1. Disk Space
     total, used, free = shutil.disk_usage("/")
     free_gb = free // (2**30)
+    health_report["checks"]["disk_space"] = {
+        "free_gb": free_gb,
+        "status": "OK" if free_gb >= 5 else "WARNING"
+    }
     logger.info(f"Disk Space: {free_gb} GB free")
     if free_gb < 5:
         logger.warning("Low disk space! (< 5GB)")
@@ -27,9 +36,13 @@ def check_system_health():
         # Connect to 8.8.8.8 (Google DNS) on port 53 (DNS)
         # This is a low-level check that doesn't require HTTP
         socket.create_connection(("8.8.8.8", 53), timeout=3)
+        health_report["checks"]["connectivity"] = {"status": "OK"}
         logger.info("Internet Connectivity: OK")
     except OSError:
+        health_report["checks"]["connectivity"] = {"status": "FAILED"}
         logger.error("Internet Connectivity: FAILED")
+    
+    return health_report
 
 def test_reuters():
     logger.info("Testing ReutersCollector...")
