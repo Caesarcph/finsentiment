@@ -1,6 +1,5 @@
 from typing import List, Dict, Any
 from ..base_collector import BaseCollector
-import feedparser
 from datetime import datetime, timezone
 import time
 
@@ -19,34 +18,48 @@ class ReutersCollector(BaseCollector):
         self.feeds = feeds or self.DEFAULT_FEEDS
 
     def _collect_implementation(self) -> List[Dict[str, Any]]:
+        """
+        Implementation to collect data from Reuters RSS feeds.
+        Uses a simple HTTP GET request and basic XML parsing to avoid dependency on feedparser.
+        """
         collected_data = []
+        try:
+            import urllib.request
+            import xml.etree.ElementTree as ET
+        except ImportError:
+            self.logger.error("urllib or xml modules not available")
+            return []
+            
         for feed_url in self.feeds:
             try:
                 self.logger.debug(f"Fetching feed: {feed_url}")
-                feed = feedparser.parse(feed_url)
+                response = urllib.request.urlopen(feed_url)
+                content = response.read().decode('utf-8')
                 
-                # feedparser sets bozo=1 if there's a malformed XML, but often still parses content.
-                if feed.bozo:
-                     self.logger.warning(f"Potential issue parsing feed {feed_url}: {feed.bozo_exception}")
-
-                for entry in feed.entries:
-                    # Convert struct_time to ISO format if available
+                root = ET.fromstring(content)
+                items = root.findall('.//item')
+                
+                for item in items:
+                    title_elem = item.find('title')
+                    link_elem = item.find('link')
+                    desc_elem = item.find('description')
+                    pubdate_elem = item.find('pubDate')
+                    
                     pub_date = None
-                    if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                         dt = datetime.fromtimestamp(time.mktime(entry.published_parsed), tz=timezone.utc)
-                         pub_date = dt.isoformat()
-                    elif hasattr(entry, 'updated_parsed') and entry.updated_parsed:
-                         dt = datetime.fromtimestamp(time.mktime(entry.updated_parsed), tz=timezone.utc)
-                         pub_date = dt.isoformat()
-                    else:
-                        pub_date = entry.get('published') or entry.get('updated')
-
+                    if pubdate_elem is not None and pubdate_elem.text:
+                        # Parse RSS pubDate format to ISO
+                        try:
+                            dt = datetime.strptime(pubdate_elem.text, '%a, %d %b %Y %H:%M:%S %z')
+                            pub_date = dt.isoformat()
+                        except ValueError:
+                            pub_date = pubdate_elem.text
+                    
                     collected_data.append({
                         "source": "reuters",
-                        "title": entry.get("title"),
-                        "link": entry.get("link"),
-                        "summary": entry.get("summary"),
-                        "tags": [tag.term for tag in entry.get("tags", [])],
+                        "title": title_elem.text if title_elem is not None else "",
+                        "link": link_elem.text if link_elem is not None else "",
+                        "summary": desc_elem.text if desc_elem is not None else "",
+                        "tags": [],
                         "published_at": pub_date,
                         "crawled_at": datetime.now(timezone.utc).isoformat()
                     })
