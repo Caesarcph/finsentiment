@@ -1,23 +1,26 @@
 import argparse
 import logging
-import sys
 import shutil
 import socket
-from typing import List, Dict, Any
+import sys
+from datetime import datetime
+from typing import Any, Dict, List
+
 from ..collectors.news.reuters import ReutersCollector
 from ..collectors.news.yahoo_finance import YahooFinanceCollector
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+
 def check_system_health() -> Dict[str, Any]:
-    """Checks basic system health metrics (disk space, connectivity)."""
+    """Return basic system health metrics (disk space and connectivity)."""
     logger.info("Checking system health...")
-    
+
     health_report = {
-        "timestamp": __import__('datetime').datetime.now().isoformat(),
-        "checks": {}
+        "timestamp": datetime.now().isoformat(),
+        "checks": {},
     }
     
     # 1. Disk Space
@@ -44,7 +47,8 @@ def check_system_health() -> Dict[str, Any]:
     
     return health_report
 
-def test_reuters():
+def test_reuters() -> None:
+    """Run a quick Reuters collector smoke test and print sample rows."""
     logger.info("Testing ReutersCollector...")
     collector = ReutersCollector()
     data = collector.collect()
@@ -52,7 +56,9 @@ def test_reuters():
     for item in data[:3]:  # Show first 3
         print(f"  - [{item.get('published_at')}] {item.get('title')}")
 
-def test_yahoo(tickers: List[str]):
+
+def test_yahoo(tickers: List[str]) -> None:
+    """Run a Yahoo Finance collector smoke test for the given tickers."""
     logger.info(f"Testing YahooFinanceCollector for {tickers}...")
     collector = YahooFinanceCollector(tickers=tickers)
     data = collector.collect()
@@ -60,7 +66,9 @@ def test_yahoo(tickers: List[str]):
     for item in data[:3]:
         print(f"  - [{item.get('timestamp')}] {item.get('ticker')}: {item.get('title')}")
 
-def main():
+
+def main() -> None:
+    """Parse CLI arguments and execute selected diagnostics checks."""
     parser = argparse.ArgumentParser(description="FinSentiment Diagnostics Tool")
     parser.add_argument("--reuters", action="store_true", help="Test Reuters Collector")
     parser.add_argument("--yahoo", nargs="+", help="Test Yahoo Collector with specific tickers (e.g. AAPL MSFT)")
