@@ -1,8 +1,10 @@
-from typing import List, Dict, Any
-from ..base_collector import BaseCollector
-import feedparser
-from datetime import datetime, timezone
 import time
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import feedparser
+
+from ..base_collector import BaseCollector
 
 class SeekingAlphaCollector(BaseCollector):
     """
@@ -10,7 +12,7 @@ class SeekingAlphaCollector(BaseCollector):
     """
     DEFAULT_FEED = "https://seekingalpha.com/market_currents.xml"
 
-    def __init__(self, feed_url: str = None, refresh_interval: int = 300):
+    def __init__(self, feed_url: Optional[str] = None, refresh_interval: int = 300) -> None:
         super().__init__(name="seeking_alpha", source_type="news", refresh_interval=refresh_interval)
         self.feed_url = feed_url or self.DEFAULT_FEED
 

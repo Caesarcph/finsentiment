@@ -1,7 +1,7 @@
-from typing import List, Dict, Any
-from ..base_collector import BaseCollector
 from datetime import datetime, timezone
-import time
+from typing import Any, Dict, List, Optional
+
+from ..base_collector import BaseCollector
 
 class ReutersCollector(BaseCollector):
     """
@@ -13,7 +13,7 @@ class ReutersCollector(BaseCollector):
         "http://feeds.reuters.com/reuters/topNews"
     ]
 
-    def __init__(self, feeds: List[str] = None, refresh_interval: int = 300):
+    def __init__(self, feeds: Optional[List[str]] = None, refresh_interval: int = 300) -> None:
         super().__init__(name="reuters", source_type="news", refresh_interval=refresh_interval)
         self.feeds = feeds or self.DEFAULT_FEEDS
 
