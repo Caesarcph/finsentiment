@@ -1,3 +1,5 @@
 [2026-02-14 12:00] finsentiment
 ✅ Type improvement: Add return type and health report structure to diagnostics
-📝 Commit: 32bdabc
+📝 Commit: 32bdabc[2026-02-23 18:03] finsentiment
+✅ 类型注解改进: 为 Reuters/SeekingAlpha 采集器构造函数补全 Optional 与返回类型注解
+📝 Commit: e7cf9a0
