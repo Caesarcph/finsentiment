@@ -99,18 +99,72 @@ class SentimentEngine:
     def get_sentiment(self, ticker: str) -> SentimentResult:
         """
         Get current sentiment for a specific ticker.
-        
+
+        Current implementation provides a lightweight heuristic score from
+        collected headlines/summaries and explicit ticker tags.
+
         Args:
             ticker: Stock ticker symbol (e.g., "AAPL", "TSLA")
         """
-        # TODO: Implement full sentiment aggregation pipeline
+        positive_words = {"beat", "surge", "growth", "upgrade", "bullish", "record"}
+        negative_words = {"miss", "drop", "downgrade", "bearish", "lawsuit", "warning"}
+
+        normalized_ticker = ticker.upper()
+        relevant_texts: List[str] = []
+
+        for collector in self.collectors:
+            for item in collector.collect():
+                item_ticker = str(item.get("ticker", "")).upper()
+                item_tickers = [str(t).upper() for t in item.get("tickers", [])]
+                title = str(item.get("title", "") or "")
+                summary = str(item.get("summary", "") or "")
+                combined = f"{title} {summary}".lower()
+
+                # Keep records explicitly tied to the ticker, or where ticker
+                # appears in the headline/summary text.
+                if (
+                    item_ticker == normalized_ticker
+                    or normalized_ticker in item_tickers
+                    or normalized_ticker.lower() in combined
+                ):
+                    relevant_texts.append(combined)
+
+        if not relevant_texts:
+            return SentimentResult(
+                ticker=normalized_ticker,
+                score=0.0,
+                label="NEUTRAL",
+                confidence=0.0,
+                source_count=0,
+                top_factors=[],
+            )
+
+        pos_hits = sum(sum(word in text for word in positive_words) for text in relevant_texts)
+        neg_hits = sum(sum(word in text for word in negative_words) for text in relevant_texts)
+        raw = pos_hits - neg_hits
+        score = max(-1.0, min(1.0, raw / max(len(relevant_texts), 1)))
+
+        if score > 0.15:
+            label = "BULLISH"
+        elif score < -0.15:
+            label = "BEARISH"
+        else:
+            label = "NEUTRAL"
+
+        confidence = min(1.0, (abs(score) + min(len(relevant_texts), 10) / 10) / 2)
+        top_factors = [
+            f"positive_hits={pos_hits}",
+            f"negative_hits={neg_hits}",
+            f"matched_items={len(relevant_texts)}",
+        ]
+
         return SentimentResult(
-            ticker=ticker,
-            score=0.0,
-            label="NEUTRAL",
-            confidence=0.0,
-            source_count=0,
-            top_factors=[]
+            ticker=normalized_ticker,
+            score=round(score, 4),
+            label=label,
+            confidence=round(confidence, 4),
+            source_count=len(relevant_texts),
+            top_factors=top_factors,
         )
 
     def add_output(self, output: Any) -> None:
