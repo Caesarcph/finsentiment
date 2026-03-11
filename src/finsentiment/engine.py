@@ -3,6 +3,8 @@ SentimentEngine - Core engine for real-time financial sentiment analysis.
 """
 
 import logging
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -43,6 +45,9 @@ class SentimentEngine:
         self.collectors: List[BaseCollector] = []
         self.outputs: List[Any] = []
         self._running = False
+        self._collection_thread: Optional[threading.Thread] = None
+        self._collected_data: Dict[str, List[Dict[str, Any]]] = {}
+        self._data_lock = threading.Lock()
 
     @classmethod
     def from_config(cls, config_path: str) -> "SentimentEngine":
@@ -89,7 +94,33 @@ class SentimentEngine:
         """Start real-time data collection from all registered collectors."""
         self._running = True
         self.logger.info("SentimentEngine started")
-        # TODO: Implement background collection loop
+        
+        # Start background collection thread
+        self._collection_thread = threading.Thread(target=self._collection_loop, daemon=True)
+        self._collection_thread.start()
+        self.logger.info("Background collection thread started")
+    
+    def _collection_loop(self) -> None:
+        """Background loop to periodically collect data from all collectors."""
+        while self._running:
+            for collector in self.collectors:
+                if not self._running:
+                    break
+                try:
+                    data = collector.collect()
+                    if data:
+                        with self._data_lock:
+                            collector_name = collector.name
+                            if collector_name not in self._collected_data:
+                                self._collected_data[collector_name] = []
+                            self._collected_data[collector_name].extend(data)
+                            # Keep only last 100 items per collector to limit memory
+                            self._collected_data[collector_name] = self._collected_data[collector_name][-100:]
+                except Exception as exc:
+                    self.logger.error(f"Collection error in background loop: {exc}")
+            
+            # Sleep for 30 seconds before next collection cycle
+            time.sleep(30)
 
     def stop(self) -> None:
         """Stop all collection activities."""
@@ -112,22 +143,39 @@ class SentimentEngine:
         normalized_ticker = ticker.upper()
         relevant_texts: List[str] = []
 
-        for collector in self.collectors:
-            for item in collector.collect():
-                item_ticker = str(item.get("ticker", "")).upper()
-                item_tickers = [str(t).upper() for t in item.get("tickers", [])]
-                title = str(item.get("title", "") or "")
-                summary = str(item.get("summary", "") or "")
-                combined = f"{title} {summary}".lower()
+        # First, try to use data from background collection
+        with self._data_lock:
+            for source_data in self._collected_data.values():
+                for item in source_data:
+                    item_ticker = str(item.get("ticker", "")).upper()
+                    item_tickers = [str(t).upper() for t in item.get("tickers", [])]
+                    title = str(item.get("title", "") or "")
+                    summary = str(item.get("summary", "") or "")
+                    combined = f"{title} {summary}".lower()
 
-                # Keep records explicitly tied to the ticker, or where ticker
-                # appears in the headline/summary text.
-                if (
-                    item_ticker == normalized_ticker
-                    or normalized_ticker in item_tickers
-                    or normalized_ticker.lower() in combined
-                ):
-                    relevant_texts.append(combined)
+                    if (
+                        item_ticker == normalized_ticker
+                        or normalized_ticker in item_tickers
+                        or normalized_ticker.lower() in combined
+                    ):
+                        relevant_texts.append(combined)
+
+        # If no background data, fall back to real-time collection
+        if not relevant_texts:
+            for collector in self.collectors:
+                for item in collector.collect():
+                    item_ticker = str(item.get("ticker", "")).upper()
+                    item_tickers = [str(t).upper() for t in item.get("tickers", [])]
+                    title = str(item.get("title", "") or "")
+                    summary = str(item.get("summary", "") or "")
+                    combined = f"{title} {summary}".lower()
+
+                    if (
+                        item_ticker == normalized_ticker
+                        or normalized_ticker in item_tickers
+                        or normalized_ticker.lower() in combined
+                    ):
+                        relevant_texts.append(combined)
 
         if not relevant_texts:
             return SentimentResult(
@@ -176,3 +224,18 @@ class SentimentEngine:
         """Register a data collector."""
         self.collectors.append(collector)
         self.logger.info(f"Added collector: {collector.name}")
+    
+    def get_collected_data(self, source: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Get collected data, optionally filtered by source.
+        
+        Args:
+            source: Filter by collector name (e.g., "reuters"), or None for all.
+        
+        Returns:
+            Dictionary mapping source names to lists of collected items.
+        """
+        with self._data_lock:
+            if source is None:
+                return dict(self._collected_data)
+            return {source: self._collected_data.get(source, [])}
