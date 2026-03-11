@@ -4,9 +4,15 @@ SentimentEngine - Core engine for real-time financial sentiment analysis.
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
+
 from .collectors.base_collector import BaseCollector
+from .collectors.news.reuters import ReutersCollector
+from .collectors.news.seeking_alpha import SeekingAlphaCollector
+from .collectors.news.yahoo_finance import YahooFinanceCollector
 
 
 @dataclass
@@ -42,8 +48,41 @@ class SentimentEngine:
     def from_config(cls, config_path: str) -> "SentimentEngine":
         """Initialize engine from configuration directory."""
         engine = cls()
-        # TODO: Load collectors from config_path/sources.yaml
-        engine.logger.info("Engine initialized (config loading not yet implemented)")
+
+        sources_file = Path(config_path) / "sources.yaml"
+        with sources_file.open("r", encoding="utf-8") as f:
+            config = yaml.safe_load(f) or {}
+
+        news_cfg = config.get("news", {})
+
+        if news_cfg.get("reuters", {}).get("enabled", False):
+            reuters_cfg = news_cfg["reuters"]
+            engine.add_collector(
+                ReutersCollector(
+                    feeds=reuters_cfg.get("feeds"),
+                    refresh_interval=reuters_cfg.get("refresh_interval", 300),
+                )
+            )
+
+        if news_cfg.get("yahoo_finance", {}).get("enabled", False):
+            yahoo_cfg = news_cfg["yahoo_finance"]
+            engine.add_collector(
+                YahooFinanceCollector(
+                    tickers=yahoo_cfg.get("tickers", []),
+                    refresh_interval=yahoo_cfg.get("refresh_interval", 300),
+                )
+            )
+
+        if news_cfg.get("seeking_alpha", {}).get("enabled", False):
+            seeking_cfg = news_cfg["seeking_alpha"]
+            engine.add_collector(
+                SeekingAlphaCollector(
+                    feed_url=seeking_cfg.get("feed_url"),
+                    refresh_interval=seeking_cfg.get("refresh_interval", 300),
+                )
+            )
+
+        engine.logger.info("Engine initialized with %d collectors", len(engine.collectors))
         return engine
 
     def start(self) -> None:
