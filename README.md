@@ -1,36 +1,50 @@
 # 📊 FinSentiment
 
-> Real-time financial sentiment analysis engine with multi-source aggregation and MT5 signal integration.
+> Financial news sentiment engine (early prototype) — multi-source news collection with a simple sentiment score; LLM/FinBERT analysis and MT5 signal integration are planned.
 
+[![CI](https://github.com/Caesarcph/finsentiment/actions/workflows/ci.yml/badge.svg)](https://github.com/Caesarcph/finsentiment/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
+
+> **Status:** Early-stage prototype. Implemented today: news collectors for Yahoo Finance (via `yfinance`), Reuters RSS and Seeking Alpha RSS; a YAML-configured `SentimentEngine` with a background polling loop; a keyword-based sentiment score per ticker; a rolling-hash `Deduplicator`; and a diagnostics CLI. Not implemented yet: FinBERT/LLM analysis, social and official sources, REST API, MT5 bridge, webhooks, database storage, Docker — see the Development Roadmap section below.
 
 ## 🎯 Overview
 
-FinSentiment is a production-ready sentiment analysis pipeline that:
+FinSentiment aims to be a sentiment analysis pipeline that:
 
-1. **Collects** financial news and social media in real-time
-2. **Analyzes** sentiment using fine-tuned FinBERT + LLM ensemble
-3. **Outputs** trading signals compatible with MT5 and other platforms
+1. **Collects** financial news (implemented for 3 news sources) and social media (planned)
+2. **Analyzes** sentiment — currently a keyword heuristic; a FinBERT + LLM ensemble is planned
+3. **Outputs** trading signals compatible with MT5 and other platforms (planned)
 
-Perfect companion for your [llm-rl-mt5-trading](https://github.com/Caesarcph/llm-rl-mt5-trading) system.
+Intended as a companion for the [llm-rl-mt5-trading](https://github.com/Caesarcph/llm-rl-mt5-trading) system.
 
 ## ✨ Key Features
 
-### Data Collection
-- 📰 **News Sources**: Reuters, Bloomberg, Yahoo Finance, Seeking Alpha
-- 🐦 **Social Media**: Twitter/X financial accounts, Reddit (r/wallstreetbets, r/stocks)
+### Implemented
+- 📰 **News collectors**: Yahoo Finance (per-ticker news via `yfinance`), Reuters (RSS, stdlib XML parsing), Seeking Alpha (Market Currents RSS via `feedparser`)
+- ⏱️ **Collector framework**: `BaseCollector` with per-source refresh-interval rate limiting and error handling
+- 🔁 **Background collection**: `SentimentEngine.start()` polls all collectors in a daemon thread and keeps the last 100 items per source in memory
+- 🧮 **Heuristic sentiment**: `get_sentiment(ticker)` matches items by ticker/text and scores them with small positive/negative keyword lists (score in [-1, 1], label BULLISH/BEARISH/NEUTRAL)
+- 🧹 **Deduplication**: `Deduplicator` (rolling MD5 window over source/title/link/summary) — available as a standalone processor, not yet wired into the engine
+- 🩺 **Diagnostics CLI**: disk/connectivity health check and collector smoke tests
+
+> Note: the default Reuters feed URLs are the legacy `feeds.reuters.com` RSS endpoints, which may no longer be served; override them in `sources.yaml` if needed. All collectors return an empty list on network errors.
+
+### Planned
+
+#### Data Collection
+- 📰 **More news sources**: Bloomberg
+- 🐦 **Social Media**: Twitter/X financial accounts, Reddit (r/wallstreetbets, r/stocks), StockTwits — config stubs exist (disabled), no collectors yet
 - 📢 **Official Sources**: SEC filings, Fed announcements, earnings calls
 - 🌐 **Multi-language**: English and Chinese (Sina Finance, Eastmoney)
 
-### Analysis Engine
-- 🧠 **Hybrid Model**: FinBERT base + GPT-4 for nuance detection
+#### Analysis Engine
+- 🧠 **Hybrid Model**: FinBERT base + GPT-4/Claude for nuance detection
 - 📈 **Entity Recognition**: Company, ticker, sector extraction
 - ⏰ **Temporal Decay**: Recent news weighted higher
 - 🎯 **Aspect Sentiment**: Bullish on earnings ≠ bullish on management
 
-### Output & Integration
+#### Output & Integration
 - 📡 **REST API**: JSON endpoints for any trading system
 - 🔌 **MT5 Bridge**: Direct signal injection to MetaTrader 5
 - 📊 **Webhooks**: Slack, Discord, Telegram alerts
@@ -38,52 +52,34 @@ Perfect companion for your [llm-rl-mt5-trading](https://github.com/Caesarcph/llm
 
 ## 🏗️ Architecture
 
+Current tree:
+
 ```
 finsentiment/
-├── collectors/
-│   ├── base_collector.py       # Abstract collector interface
-│   ├── news/
-│   │   ├── reuters.py          # Reuters RSS + API
-│   │   ├── bloomberg.py        # Bloomberg Terminal API
-│   │   ├── yahoo_finance.py    # Yahoo Finance scraper
-│   │   ├── seeking_alpha.py    # Seeking Alpha API
-│   │   └── sina_finance.py     # 新浪财经 (Chinese)
-│   ├── social/
-│   │   ├── twitter.py          # Twitter/X API v2
-│   │   ├── reddit.py           # Reddit PRAW
-│   │   └── stocktwits.py       # StockTwits API
-│   └── official/
-│       ├── sec_edgar.py        # SEC EDGAR filings
-│       └── fed_releases.py     # Federal Reserve
-├── processors/
-│   ├── cleaner.py              # Text normalization
-│   ├── deduplicator.py         # Near-duplicate detection
-│   └── entity_extractor.py     # NER for tickers/companies
-├── analyzers/
-│   ├── finbert_analyzer.py     # FinBERT sentiment
-│   ├── llm_analyzer.py         # GPT-4/Claude analysis
-│   ├── ensemble.py             # Model combination
-│   └── aspect_sentiment.py     # Aspect-based analysis
-├── signals/
-│   ├── aggregator.py           # Multi-source aggregation
-│   ├── decay.py                # Temporal weighting
-│   └── generator.py            # Trading signal output
-├── integrations/
-│   ├── mt5_bridge.py           # MetaTrader 5 connector
-│   ├── webhook.py              # Slack/Discord/Telegram
-│   └── database.py             # PostgreSQL/TimescaleDB
-├── api/
-│   ├── main.py                 # FastAPI application
-│   ├── routes/
-│   └── schemas/
-├── config/
-│   ├── sources.yaml            # Data source configuration
-│   ├── models.yaml             # Model parameters
-│   └── signals.yaml            # Signal generation rules
+├── src/finsentiment/
+│   ├── __init__.py                 # exports SentimentEngine, SentimentResult
+│   ├── engine.py                   # SentimentEngine: config loading, polling loop, heuristic scoring
+│   ├── collectors/
+│   │   ├── base_collector.py       # Abstract collector interface + rate limiting
+│   │   └── news/
+│   │       ├── reuters.py          # Reuters RSS
+│   │       ├── seeking_alpha.py    # Seeking Alpha RSS (feedparser)
+│   │       └── yahoo_finance.py    # Yahoo Finance news (yfinance)
+│   ├── processors/
+│   │   └── deduplicator.py         # Near-duplicate detection (rolling hash window)
+│   ├── utils/
+│   │   └── diagnostics.py          # Health check + collector smoke-test CLI
+│   └── config/
+│       └── sources.yaml            # Data source configuration
 ├── tests/
-├── docker/
-└── docs/
+│   ├── test_collectors.py          # Yahoo collector smoke test (network; tolerates failure)
+│   ├── test_deduplicator.py
+│   └── test_yahoo_normalization.py
+├── pytest.ini
+└── requirements.txt
 ```
+
+Planned modules (not yet created): `collectors/news/bloomberg.py`, `collectors/news/sina_finance.py`, `collectors/social/` (twitter, reddit, stocktwits), `collectors/official/` (sec_edgar, fed_releases), `processors/cleaner.py`, `processors/entity_extractor.py`, `analyzers/` (finbert, llm, ensemble, aspect), `signals/` (aggregator, decay, generator), `integrations/` (mt5_bridge, webhook, database), `api/` (FastAPI app), `config/models.yaml`, `config/signals.yaml`.
 
 ## 🚀 Quick Start
 
@@ -94,79 +90,99 @@ finsentiment/
 git clone https://github.com/Caesarcph/finsentiment.git
 cd finsentiment
 
-# Install dependencies
-pip install -e .
+# Install dependencies (yfinance, feedparser, PyYAML, pytest)
+pip install -r requirements.txt
 
-# Or use Docker
-docker-compose up -d
+# The package is not pip-installable yet; put src/ on the path
+export PYTHONPATH=src   # Windows PowerShell: $env:PYTHONPATH="src"
 ```
 
 ### Configuration
 
+Sources are configured in `src/finsentiment/config/sources.yaml` (excerpt):
+
 ```yaml
-# config/sources.yaml
 news:
   reuters:
     enabled: true
-    tickers: ["AAPL", "GOOGL", "MSFT", "TSLA"]
     refresh_interval: 300  # seconds
-    
+    feeds:
+      - "http://feeds.reuters.com/reuters/businessNews"
+
   yahoo_finance:
     enabled: true
-    categories: ["technology", "finance"]
-    
-social:
+    refresh_interval: 300
+    tickers: ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA", "AMD"]
+
+  seeking_alpha:
+    enabled: true
+    refresh_interval: 300
+    feed_url: "https://seekingalpha.com/market_currents.xml"
+
+social:            # placeholders only — no social collectors are implemented yet
   twitter:
-    enabled: true
-    accounts: ["@markets", "@DeItaone", "@unusual_whales"]
-    keywords: ["$AAPL", "$TSLA", "Fed", "inflation"]
-    
+    enabled: false
   reddit:
-    enabled: true
-    subreddits: ["wallstreetbets", "stocks", "investing"]
-    min_score: 100  # Filter low-quality posts
+    enabled: false
 ```
 
 ### Basic Usage
 
 ```python
 from finsentiment import SentimentEngine
-from finsentiment.integrations import MT5Bridge
 
-# Initialize engine
-engine = SentimentEngine.from_config("config/")
+# Initialize engine (reads sources.yaml from this directory)
+engine = SentimentEngine.from_config("src/finsentiment/config")
 
-# Start real-time collection
+# Start background collection (polls collectors every 30 s, in-memory only)
 engine.start()
 
-# Get current sentiment for a ticker
+# Get current sentiment for a ticker (keyword heuristic)
 sentiment = engine.get_sentiment("AAPL")
 print(f"AAPL Sentiment: {sentiment.score:.2f} ({sentiment.label})")
-print(f"Based on {sentiment.source_count} sources")
-print(f"Key drivers: {sentiment.top_factors}")
+print(f"Based on {sentiment.source_count} matching items")
+print(f"Factors: {sentiment.top_factors}")
+# e.g. Factors: ['positive_hits=3', 'negative_hits=1', 'matched_items=5']
 
-# Output:
-# AAPL Sentiment: 0.72 (BULLISH)
-# Based on 47 sources
-# Key drivers: ['strong iPhone sales', 'AI integration plans', 'dividend increase']
+# Inspect raw collected items
+print(engine.get_collected_data("yahoo_finance"))
 
-# Connect to MT5
-mt5 = MT5Bridge(server="MetaQuotes-Demo", login=12345678, password="xxx")
-engine.add_output(mt5)
-
-# Now signals automatically flow to MT5!
+engine.stop()
 ```
 
-### REST API
+If nothing has been collected yet (or all sources fail), `get_sentiment` returns a NEUTRAL result with `source_count=0`.
+
+### Deduplication
+
+```python
+from finsentiment.processors import Deduplicator
+
+unique_items = Deduplicator(capacity=10_000).process(items)
+```
+
+### Diagnostics
 
 ```bash
-# Start API server
-uvicorn finsentiment.api:app --host 0.0.0.0 --port 8000
+python -m finsentiment.utils.diagnostics --health
+python -m finsentiment.utils.diagnostics --reuters
+python -m finsentiment.utils.diagnostics --yahoo AAPL MSFT
+```
 
-# Get sentiment
-curl http://localhost:8000/api/v1/sentiment/AAPL
+### Running Tests
 
-# Response:
+```bash
+pytest
+```
+
+## 🔭 Planned Design
+
+The sections below describe the target design. None of this is implemented yet.
+
+### REST API (planned)
+
+```bash
+# Planned: FastAPI server
+# GET /api/v1/sentiment/AAPL
 {
   "ticker": "AAPL",
   "sentiment_score": 0.72,
@@ -174,78 +190,54 @@ curl http://localhost:8000/api/v1/sentiment/AAPL
   "confidence": 0.89,
   "source_breakdown": {
     "news": {"score": 0.68, "count": 23},
-    "social": {"score": 0.75, "count": 156},
-    "official": {"score": 0.71, "count": 2}
+    "social": {"score": 0.75, "count": 156}
   },
-  "aspects": {
-    "earnings": 0.82,
-    "product": 0.71,
-    "management": 0.65,
-    "macro": 0.58
-  },
-  "key_headlines": [
-    {"text": "Apple reports record services revenue", "sentiment": 0.85},
-    {"text": "iPhone 16 demand exceeds expectations", "sentiment": 0.78}
-  ],
-  "signal": {
-    "action": "BUY",
-    "strength": 0.65,
-    "timeframe": "4H"
-  },
+  "aspects": {"earnings": 0.82, "product": 0.71, "management": 0.65},
+  "signal": {"action": "BUY", "strength": 0.65, "timeframe": "4H"},
   "updated_at": "2024-12-15T14:30:00Z"
 }
-
-# Subscribe to real-time updates (WebSocket)
-wscat -c ws://localhost:8000/ws/sentiment/AAPL
+# Planned: WebSocket real-time updates at /ws/sentiment/AAPL
 ```
 
-## 📊 Signal Generation Logic
+### Signal Generation Logic (planned)
 
 ```python
-# Simplified signal generation algorithm
+# Sketch of the planned signal generation algorithm (pseudocode)
 def generate_signal(sentiment_data):
     # 1. Aggregate with temporal decay
     weighted_score = 0
     total_weight = 0
-    
+
     for source in sentiment_data.sources:
         age_hours = (now - source.timestamp).hours
         weight = source.reliability * exp(-0.1 * age_hours)
         weighted_score += source.sentiment * weight
         total_weight += weight
-    
+
     final_score = weighted_score / total_weight
-    
+
     # 2. Apply confidence threshold
     if sentiment_data.confidence < 0.6:
         return Signal(action="HOLD", reason="Low confidence")
-    
+
     # 3. Generate signal
     if final_score > 0.6:
-        return Signal(
-            action="BUY",
-            strength=min((final_score - 0.5) * 2, 1.0),
-            timeframe=determine_timeframe(sentiment_data)
-        )
+        return Signal(action="BUY", strength=min((final_score - 0.5) * 2, 1.0))
     elif final_score < 0.4:
-        return Signal(
-            action="SELL",
-            strength=min((0.5 - final_score) * 2, 1.0),
-            timeframe=determine_timeframe(sentiment_data)
-        )
+        return Signal(action="SELL", strength=min((0.5 - final_score) * 2, 1.0))
     else:
         return Signal(action="HOLD", reason="Neutral sentiment")
 ```
 
-## 🔧 Model Configuration
+### Model Configuration (planned)
 
 ```yaml
-# config/models.yaml
+# Planned: config/models.yaml
 finbert:
   model: "ProsusAI/finbert"
   device: "cuda"  # or "cpu"
   batch_size: 32
-  
+
 llm:
   provider: "anthropic"
   model: "claude-sonnet-4-20250514"
@@ -254,7 +246,7 @@ llm:
     - nuance_detection      # "despite" clauses, sarcasm
     - entity_disambiguation # "Apple" company vs fruit
     - aspect_extraction     # What specifically is positive?
-    
+
 ensemble:
   weights:
     finbert: 0.6
@@ -264,37 +256,38 @@ ensemble:
 
 ## 🛠️ Development Roadmap
 
-### Phase 1: Data Collection (Weeks 1-2)
-- [ ] News collector framework with rate limiting
-- [ ] Reuters, Yahoo Finance, Seeking Alpha integrations
+### Phase 1: Data Collection
+- [x] News collector framework with rate limiting (refresh-interval based)
+- [x] Reuters, Yahoo Finance, Seeking Alpha integrations
 - [ ] Twitter/X and Reddit collectors
-- [ ] Deduplication pipeline
+- [ ] Deduplication pipeline (`Deduplicator` exists; not yet wired into the engine)
 
-### Phase 2: Analysis Engine (Weeks 3-4)
+### Phase 2: Analysis Engine
 - [ ] FinBERT integration with GPU support
 - [ ] LLM analyzer for edge cases
 - [ ] Entity extraction (tickers, companies)
 - [ ] Aspect-based sentiment analysis
 
-### Phase 3: Signal Generation (Weeks 5-6)
+### Phase 3: Signal Generation
 - [ ] Multi-source aggregation with decay
-- [ ] Confidence scoring
+- [ ] Confidence scoring (only a basic heuristic confidence today)
 - [ ] Signal generation rules
 - [ ] Backtesting integration
 
-### Phase 4: Integrations (Weeks 7-8)
+### Phase 4: Integrations
 - [ ] REST API with FastAPI
 - [ ] WebSocket real-time updates
 - [ ] MT5 bridge connector
 - [ ] Webhook notifications
 
-### Phase 5: Chinese Language Support (Weeks 9-10)
+### Phase 5: Chinese Language Support
 - [ ] Sina Finance collector
 - [ ] Eastmoney collector
 - [ ] Chinese FinBERT model
 - [ ] Translation pipeline for cross-reference
 
-### Phase 6: Production Hardening (Weeks 11-12)
+### Phase 6: Production Hardening
+- [ ] Packaging (`pyproject.toml`)
 - [ ] Docker containerization
 - [ ] Kubernetes deployment configs
 - [ ] Monitoring and alerting
@@ -302,12 +295,7 @@ ensemble:
 
 ## 📈 Performance Metrics
 
-| Metric | Value |
-|--------|-------|
-| Sentiment Accuracy | 87.3% (vs human labels) |
-| Processing Latency | <500ms per article |
-| Throughput | 1000+ articles/minute |
-| API Response Time | <100ms (p95) |
+No accuracy, latency or throughput benchmarks have been run yet. Evaluation against human-labelled data is planned once the FinBERT/LLM analyzers exist.
 
 ## 🤝 Contributing
 
@@ -315,8 +303,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Priority Areas
 1. Additional news source connectors
-2. Improved Chinese language models
-3. Real-time dashboard UI
+2. Model-based sentiment analysis (FinBERT / LLM)
+3. Improved Chinese language models
 4. More trading platform integrations
 
 ## 📄 License
